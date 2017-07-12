@@ -50,7 +50,7 @@ def get_tweets_as_dataframe(download_directory):
 		tweet_frame = pd.DataFrame.from_csv(open(os.path.join(download_directory, file)))
 		dataframes.append(tweet_frame)
 
-	return pd.concat(dataframes)
+	return pd.concat(dataframes).reset_index()
 
 
 def clean_temporary_resources():
@@ -82,31 +82,32 @@ def load_resources(update=False):
 
 	return articles_df
 
-# def get_spam_retweets(tweet_statuses)
-	
-# 	'''
-# 	Identify original tweets and count number of "retweets"
-
-# 	tweet_statuses is a pandas series
-# 	'''
-
-# 	_retweets = []
-# 	status_counts = tweet_statuses.value_counts()
-	
-# 	for status in tweet_statuses:
-# 		if status[:2] == "RT":
-# 			_retweets.append(0)
-
 
 
 if __name__ == "__main__":
 
-	tweets_df = load_resources(update=False)
-	
+	tweet_records = load_resources(update=False)
+	print(tweet_records.index)
 	connection_string = 'postgresql://{}:{}@localhost:5432/{}'.format(os.environ['PG_USERNAME'], 
 		os.environ['PG_PASSWORD'], os.environ['PG_DATABASE'])
 	engine = create_engine(connection_string)
 
-	tweets_df.to_sql("scraping_raw_records", connection_string, schema="tweet_data", if_exists="append")
+	# raw records input
+	tweet_records.to_sql("scraping_raw_records", connection_string, 
+							schema="tweet_data", if_exists="append")
+
+	# raw tweets input 
+	unique_tweets_columns = ["tweet_id", "tweet_created_at", "tweet_status",
+								 "user_id", "user_verified"]
+	
+	tweet_records_unique = tweet_records[unique_tweets_columns].drop_duplicates()
+	
+	tweet_records_unique.rename(columns = {'tweet_id':'id'}, inplace = True)
+	tweet_records_unique.to_sql("scraping_raw_tweets", connection_string, 
+							schema="tweet_data", if_exists="append", index=False)
+	
+
+
+
 
 

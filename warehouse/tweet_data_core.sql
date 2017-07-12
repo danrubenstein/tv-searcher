@@ -20,14 +20,14 @@ CREATE table if not exists tweet_data.scraping_raw_records
 	user_following integer
 ); 
 
-
+DROP TABLE if exists tweet_data.scraping_raw_tweets;
 CREATE table if not exists tweet_data.scraping_raw_tweets
 (
 	id bigint, 
 	tweet_created_at timestamp, 
 	tweet_status character varying(250), 
 
-	user_id int, 
+	user_id bigint, 
 	user_verified boolean, 
 	PRIMARY KEY(id)
 ); 
