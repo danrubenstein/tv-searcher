@@ -33,6 +33,7 @@ CREATE table if not exists tweet_data.scraping_raw_tweets
 ); 
 
 
+DROP table if exists tweet_data.scraping_users_found;
 CREATE table if not exists tweet_data.scraping_users_found 
 (
 	screen_name character varying(100), 
@@ -46,6 +47,7 @@ CREATE table if not exists tweet_data.scraping_users_found
 	PRIMARY KEY(id)
 ); 
 
+DROP table if exists tweet_data.scraping_search_meta;
 CREATE table if not exists tweet_data.scraping_search_meta
 (
 	search_term_raw character varying(100), 

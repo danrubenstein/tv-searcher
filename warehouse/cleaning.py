@@ -18,8 +18,7 @@ from sqlalchemy import create_engine
 
 
 
-dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
-load_dotenv(dotenv_path)
+
 
 
 def download_files(temporary_output_directory, force_update=True):
@@ -84,8 +83,8 @@ def load_resources(update=False):
 
 
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
 	tweet_records = load_resources(update=False)
 	print(tweet_records.index)
 	connection_string = 'postgresql://{}:{}@localhost:5432/{}'.format(os.environ['PG_USERNAME'], 
@@ -94,18 +93,18 @@ if __name__ == "__main__":
 
 	# raw records input
 	tweet_records.to_sql("scraping_raw_records", connection_string, 
-							schema="tweet_data", if_exists="append")
+							schema="tweet_data", if_exists="append", index=False)
 
 	# raw tweets input 
 	unique_tweets_columns = ["tweet_id", "tweet_created_at", "tweet_status",
 								 "user_id", "user_verified"]
-	
+
 	tweet_records_unique = tweet_records[unique_tweets_columns].drop_duplicates()
-	
+
 	tweet_records_unique.rename(columns = {'tweet_id':'id'}, inplace = True)
 	tweet_records_unique.to_sql("scraping_raw_tweets", connection_string, 
-							schema="tweet_data", if_exists="append", index=False)
-	
+								schema="tweet_data", if_exists="append", index=False)
+		
 
 
 
