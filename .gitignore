@@ -3,6 +3,7 @@
 /lib
 /include
 .Python
+__pycache__
 pip-selfcheck.json
 *.txt
 *.csv
