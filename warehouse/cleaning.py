@@ -2,16 +2,12 @@
 Script / function to download csv files and transform into SQL tables
 '''
 
-import argparse
 import datetime
-import json
 import os 
 import shutil
 import subprocess
-import time
 import uuid
 
-import boto3
 import pandas as pd
 from dotenv import load_dotenv
 from sqlalchemy import create_engine

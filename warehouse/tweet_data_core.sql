@@ -15,6 +15,15 @@ create table if not exists tweet_data.loaded_files
 
 ); 
 
+DROP table if exists tweet_data.scraping_search_meta;
+CREATE table if not exists tweet_data.scraping_search_meta
+(
+	search_term_raw character varying(100), 
+	search_term_input character varying(100), 
+	search_time timestamp
+
+); 
+
 DROP TABLE if exists tweet_data.scraping_raw_records;
 CREATE table if not exists tweet_data.scraping_raw_records
 (
@@ -56,12 +65,5 @@ CREATE table if not exists tweet_data.scraping_users_found
 	PRIMARY KEY(id)
 ); 
 
-DROP table if exists tweet_data.scraping_search_meta;
-CREATE table if not exists tweet_data.scraping_search_meta
-(
-	search_term_raw character varying(100), 
-	search_term_input character varying(100), 
-	search_time timestamp
 
-)
 
