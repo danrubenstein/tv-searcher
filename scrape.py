@@ -3,7 +3,6 @@ Scraper for tweet data
 '''
 
 import csv 
-import json
 import os
 from urllib.parse import quote_plus
 from base64 import b64encode
@@ -100,17 +99,16 @@ def clean_tweet_data(raw_statuses, search_term_raw, search_term_input):
     return statuses
 
 
-def load_networks(filename):
+def load_search_resources(filename):
     """
     Prepares abstract network information (networks, shownames)
     """
-    network_names = open(filename).read().split()
-    network_names = [x for x in network_names if x.strip()[0] is not "#"]
-    print(network_names)
-    return network_names
+    search_resources = open(filename).read().split()
+    search_resources = [x for x in search_resources if x.strip()[0] is not "#"]
+    return search_resources
 
 
-def load_search_terms(filename, network_names, search_as_exact="loose"):
+def load_search_terms(filename, networks=[''], accounts=[''], search_as_exact="loose"):
     """
     Prepares search queries
     search_as_exact - "only", "loose", "all"
@@ -123,7 +121,9 @@ def load_search_terms(filename, network_names, search_as_exact="loose"):
     collected_queries = []
     for term in uncommented_terms:
         if "[NETWORK]" in term: 
-            collected_queries += [(term, term.replace("[NETWORK]", n)) for n in network_names]
+            collected_queries += [(term, term.replace("[NETWORK]", n)) for n in networks]
+        elif "[ACCOUNT]" in term:
+            collected_queries += [(term, term.replace("[ACCOUNT]", n)) for n in accounts]
         else:
             collected_queries.append((term, term))
 
@@ -146,21 +146,27 @@ def handler(event, context):
 
     client = boto3.client('s3')
     
-    file1 = 'networks.txt'
+    network_resource_file = 'networks.txt'
     client.download_file(os.environ['S3_BUCKET_NAME'], 
-            'tv-searcher/resources/{}'.format(file1), 
-            '/tmp/{}'.format(file1))
+            'tv-searcher/resources/{}'.format(network_resource_file), 
+            '/tmp/{}'.format(network_resource_file))
 
-    file2 = 'exactableSearchTerms.txt'
+    search_term_resource_file = 'exactableSearchTerms.txt'
     client.download_file(os.environ['S3_BUCKET_NAME'], 
-            'tv-searcher/resources/{}'.format(file2), 
-            '/tmp/{}'.format(file2))
+            'tv-searcher/resources/{}'.format(search_term_resource_file), 
+            '/tmp/{}'.format(search_term_resource_file))
+
+    account_resource_file = 'accounts.txt'
+    client.download_file(os.environ['S3_BUCKET_NAME'], 
+            'tv-searcher/resources/{}'.format(account_resource_file), 
+            '/tmp/{}'.format(account_resource_file))
 
     # load_resources(".env")
     twitter_credential = get_app_only_auth_token(os.environ['TWITTER_CONSUMER_TOKEN'], os.environ['TWITTER_CONSUMER_SECRET'])
 
-    networks = load_networks("/tmp/{}".format(file1))
-    search_terms = load_search_terms("/tmp/{}".format(file2), networks, search_as_exact="all")
+    networks = load_search_resources("/tmp/{}".format(network_resource_file))
+    accounts = load_search_resources("/tmp/{}".format(account_resource_file))
+    search_terms = load_search_terms("/tmp/{}".format(search_term_resource_file), networks, accounts, search_as_exact="loose")
     
     cleaned_tweets = []
     
