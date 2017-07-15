@@ -17,96 +17,78 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 
-
-
-
-
-def download_files(temporary_output_directory, force_update=True):
-	'''
-	Download the files from the s3 bucket
-	'''
-	if force_update or len([x for x in os.listdir() if "tmp-resource" in x]) == 0:
-		clean_temporary_resources()
-		os.mkdir(temporary_output_directory)
-		aws_cmd = "aws s3 cp --recursive s3://{}/{}/downloads ./{}".format(os.environ['S3_BUCKET_NAME'], 
-															os.environ['PROJECT_NAME'], 
-															temporary_output_directory).split()
-		subprocess.call(aws_cmd)
-
-
-def get_tweets_as_dataframe(download_directory):
-	'''
-	Transform the json into a pandas dataframe
-
-	Returns that dataframe
-	'''
-	tweet_csv_files = [f for f in os.listdir(download_directory) if os.path.isfile(os.path.join(download_directory, f))]
-
-	dataframes = []
-
-	for file in tweet_csv_files:
-
-		tweet_frame = pd.DataFrame.from_csv(open(os.path.join(download_directory, file)))
-		dataframes.append(tweet_frame)
-
-	return pd.concat(dataframes).reset_index()
-
-
-def clean_temporary_resources():
-	''' 
-	Deletes all temporary folder files
-	'''
-	resource_directories = [x for x in os.listdir() if "tmp-resource" in x and os.path.isdir(x)]
-	for dir in resource_directories:
-		shutil.rmtree(dir)
-
-
-def load_resources(update=False):
+def load_resources_from_server():
 	
-	'''
-	Load resources, by downloading if necessary
-	'''
+	raw_directory = "tmp-resource-"+str(uuid.uuid4())
+	[shutil.rmtree(x) for x in os.listdir() if "tmp-resource" in x and os.path.isdir(x)]
+	os.mkdir(raw_directory)
+	aws_cmd = "aws s3 cp --recursive s3://{}/{}/downloads ./{}".format(os.environ['S3_BUCKET_NAME'], 
+														os.environ['PROJECT_NAME'], 
+														raw_directory).split()
+	subprocess.call(aws_cmd)
 
-	if update:
-		raw_directory = "tmp-resource-"+str(uuid.uuid4())
-		download_files(raw_directory, force_update=update)
-		articles_df = get_tweets_as_dataframe(raw_directory)
+	return raw_directory
 
+
+def get_available_tweet_csvs(pg_connection):
+
+	result = connection.execute("select filename from tweet_data.loaded_files;")
+	loaded_files = [x['filename'] for x in result]
+
+	resource_directories = [x for x in os.listdir() if "tmp-resource" in x]
+	if len(resource_directories) == 1:
+		download_directory = resource_directories[0]
+		available_tweet_csvs = [f for f in os.listdir(download_directory) 
+									if os.path.isfile(os.path.join(download_directory, f)) and 
+										f not in loaded_files]
+		return available_tweet_csvs, download_directory
+	elif len(resource_directories) == 0:
+		print("There is no tmp-resource folder")
+		return [], None
 	else:
-		resource_directories = [x for x in os.listdir() if "tmp-resource" in x]
-		if len(resource_directories) == 1:
-			articles_df = get_tweets_as_dataframe(resource_directories[0])
-		else:
-			print("I'm sorry, but there are no available resource directories.")
-
-	return articles_df
+		raise ValueError ("There are multiple tmp-resources folders")
 
 
+def process_tweet_csv(tweet_csv_filename, tweet_csv_file_directory,
+						pg_engine, pg_connection):
+
+	tweet_frame = pd.DataFrame.from_csv(open(os.path.join(tweet_csv_file_directory, tweet_csv_filename))
+											, index_col=None)
+
+	# raw records input
+	tweet_frame.to_sql("scraping_raw_records", pg_engine, 
+							schema="tweet_data", if_exists="append", index=False)
+
+	# add to list of files
+	
+	filename = tweet_csv_filename
+	file_created = tweet_csv_filename.split("_")[1].replace(".csv", "")
+	file_records = len(tweet_frame)
+
+	pg_connection.execute(
+		"""INSERT INTO tweet_data.loaded_files (filename, file_created, count_records) 
+				VALUES ('{}', '{}', {});""".format(filename, file_created, file_records))
+
+	return "Success"
 
 
 if __name__ == "__main__":
-	tweet_records = load_resources(update=False)
-	print(tweet_records.index)
+
+	dotenv_path = os.path.join(os.path.dirname(__file__)+"/../", '.env')
+	load_dotenv(dotenv_path)
+	print(os.environ["PG_USERNAME"])
+
+	load_resources_from_server()
+
 	connection_string = 'postgresql://{}:{}@localhost:5432/{}'.format(os.environ['PG_USERNAME'], 
 		os.environ['PG_PASSWORD'], os.environ['PG_DATABASE'])
+
 	engine = create_engine(connection_string)
+	connection = engine.connect()
 
-	# raw records input
-	tweet_records.to_sql("scraping_raw_records", connection_string, 
-							schema="tweet_data", if_exists="append", index=False)
-
-	# raw tweets input 
-	unique_tweets_columns = ["tweet_id", "tweet_created_at", "tweet_status",
-								 "user_id", "user_verified"]
-
-	tweet_records_unique = tweet_records[unique_tweets_columns].drop_duplicates()
-
-	tweet_records_unique.rename(columns = {'tweet_id':'id'}, inplace = True)
-	tweet_records_unique.to_sql("scraping_raw_tweets", connection_string, 
-								schema="tweet_data", if_exists="append", index=False)
-		
-
-
-
+	available_files, resource_directory = get_available_tweet_csvs(connection)
+	for file in available_files:
+		print("adding file: {}".format(file))
+		process_tweet_csv(file, resource_directory, engine, connection)
 
 

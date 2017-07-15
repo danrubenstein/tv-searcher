@@ -5,6 +5,16 @@
 
 CREATE schema if not exists tweet_data;
 
+DROP table if exists tweet_data.loaded_files; 
+create table if not exists tweet_data.loaded_files
+(
+	loaded_tweet_file_id serial PRIMARY KEY,
+	filename character varying(100), 
+	file_created timestamp,
+	count_records integer
+
+); 
+
 DROP TABLE if exists tweet_data.scraping_raw_records;
 CREATE table if not exists tweet_data.scraping_raw_records
 (
@@ -42,7 +52,6 @@ CREATE table if not exists tweet_data.scraping_users_found
 	followers integer, 
 	following integer,
 	added_at timestamp, 
-	last_seen timestamp,
 
 	PRIMARY KEY(id)
 ); 
