@@ -14,9 +14,9 @@ def get_account_network_pairings(tweet_statuses, networks, tags_max=4, tags_star
 	Identify frequent personality network pairings using a loose tf-idf strategy
 	'''
 
-	# Allowing for maximum tags
 	tweet_statuses = tweets_df[(tweets_df['tag_tokens'] <= tags_max) & 
-								(tweets_df['tag_tokens_starting'] <= tags_start_max)]['tweet_status_rt_adjusted'].drop_duplicates()
+								(tweets_df['tag_tokens_starting'] <= tags_start_max) &
+								(~tweets_df['tweet_contained_elsewhere'])]['tweet_status_rt_adjusted'].drop_duplicates()
 
 	
 	print(len(tweet_statuses))
@@ -58,12 +58,20 @@ def get_account_network_pairings(tweet_statuses, networks, tags_max=4, tags_star
 	return stat_dicts
 
 
-def update_search_accounts(pairings, num_accounts):
+def update_search_accounts(pairings, tweet_df, n_accounts_to_search):
 
 	f = open("../resources/accounts.txt", 'w+')
-	accounts = [x['account'] for x in sorted(pairings, key=lambda x: x['tf_idf'])[-num_accounts:]]
-	for account in accounts:
-		f.write("{}\n".format(account))
+	accounts = list(pd.Series([x['account'] for x in sorted(pairings, key=lambda x: -x['tf_idf'])]).drop_duplicates())
+	
+	count = 0 
+	x = 0 
+	
+	while count < n_accounts_to_search and x < len(accounts):
+		if len(search_tweets_for_account(tweet_df, accounts[x])) > 2:
+			f.write("{}\n".format(accounts[x]))
+			count += 1 
+		x += 1
+
 	f.close()
 
 
@@ -73,7 +81,8 @@ def search_tweets_for_account(tweets_df, account_name):
 	'''
 	return tweets_df[(tweets_df['tweet_status_rt_adjusted'].str.contains(account_name)) 
 							& (tweets_df['tag_tokens'] <= 4) 
-							& (tweets_df['tag_tokens_starting'] <= 0)]['tweet_status_rt_adjusted'].drop_duplicates()
+							& (tweets_df['tag_tokens_starting'] <= 0)
+							& (~tweets_df['tweet_contained_elsewhere'])]['tweet_status_rt_adjusted'].drop_duplicates()
 
 
 def get_ordered_tag_tokens(status):
@@ -88,6 +97,16 @@ def get_ordered_tag_tokens(status):
 			return count 
 	return count
 
+def get_contained_elsewhere(status, statuses):
+	'''
+	Returns 1(0) if a status is (not) a smaller substring of another status
+	'''
+	len_status = len(status)
+	for s in statuses:
+		if status in s and len_status < len(s):
+			return True
+
+	return False
 if __name__ == "__main__":
 	
 	tweets_df = load_tweets_as_dataframe()
@@ -102,17 +121,22 @@ if __name__ == "__main__":
 	tweets_df['tweet_status_rt_adjusted'] = tweets_df['tweet_status_rt_adjusted'].str.lower()
 	tweets_df['tweet_status_rt_adjusted'] = tweets_df['tweet_status_rt_adjusted'].str.rstrip('…')
 
+	adj_statuses = tweets_df['tweet_status_rt_adjusted'].values
+
+	tweets_df['tweet_contained_elsewhere'] = tweets_df['tweet_status_rt_adjusted'].apply(lambda x: get_contained_elsewhere(x, adj_statuses))
 	tweets_df['tag_tokens'] = tweets_df['tweet_status_rt_adjusted'].apply(lambda x: len([x for x in x.split() if x[0] in ["#", "@"] and len(x) > 1]))
 	tweets_df['tag_tokens_starting'] = tweets_df['tweet_status_rt_adjusted'].apply(lambda x: get_ordered_tag_tokens(x))
 
 	# Implement TF-IDF strategy
 	pairings = get_account_network_pairings(tweets_df, networks, tags_max=4, tags_start_max=1)
-	biggest_tf_idf = sorted(pairings, key=lambda x: -x['tf_idf'])[:80]
+	biggest_tf_idf = sorted(pairings, key=lambda x: -x['tf_idf'])[:100]
 
 	for i in biggest_tf_idf:
-		print(i)
-		print(len(search_tweets_for_account(tweets_df, i['account'])))
-		print(list(search_tweets_for_account(tweets_df, i['account'])))
+		pass
+		x = len(search_tweets_for_account(tweets_df, i['account']))
+		if x > 0:
+			print(i, x)
+			print(search_tweets_for_account(tweets_df, i['account']))
 
 	# Update search
-	update_search_accounts(pairings, 30)
+	update_search_accounts(pairings, tweets_df, 25)
