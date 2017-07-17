@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 
+dotenv_path = os.path.join(os.path.dirname(__file__)+"/../", '.env')
+load_dotenv(dotenv_path)
+
+
 def load_resources_from_server():
 	
 	raw_directory = "tmp-resource-"+str(uuid.uuid4())
@@ -47,7 +51,9 @@ def get_available_tweet_csvs(pg_connection):
 
 def process_tweet_csv(tweet_csv_filename, tweet_csv_file_directory,
 						pg_engine, pg_connection):
-
+	'''
+	Add the tweets to the tweet_data schema
+	'''
 	tweet_frame = pd.DataFrame.from_csv(open(os.path.join(tweet_csv_file_directory, tweet_csv_filename))
 											, index_col=None)
 
@@ -65,16 +71,32 @@ def process_tweet_csv(tweet_csv_filename, tweet_csv_file_directory,
 		"""INSERT INTO tweet_data.loaded_files (filename, file_created, count_records) 
 				VALUES ('{}', '{}', {});""".format(filename, file_created, file_records))
 
+	process_for_label_pipeline(tweet_frame, pg_engine, pg_connection)
+
 	return "Success"
+
+
+def process_for_label_pipeline(tweet_df, pg_engine, pg_connection):
+	'''
+	Add the entries to the label_data pipeline
+	'''
+
+	tweet_df.sort_values("tweet_created_at", inplace=True)
+	tweet_df.drop_duplicates("tweet_status", inplace=True)
+	tweet_df['priority'] = 0 # this can be subject to change...
+	tweet_df.to_sql("staging_tweet_data", pg_engine, 
+							schema="label_data", if_exists="fail", index=False)
+
+	# Load and execute insertion script
+	insertion_script = open("sqlscripts/label_data_load_to_pipeline.sql").read()
+	pg_connection.execute(insertion_script)
+
+	return 
 
 
 if __name__ == "__main__":
 
-	dotenv_path = os.path.join(os.path.dirname(__file__)+"/../", '.env')
-	load_dotenv(dotenv_path)
-	print(os.environ["PG_USERNAME"])
-
-	load_resources_from_server()
+	# load_resources_from_server()
 
 	connection_string = 'postgresql://{}:{}@localhost:5432/{}'.format(os.environ['PG_USERNAME'], 
 		os.environ['PG_PASSWORD'], os.environ['PG_DATABASE'])
