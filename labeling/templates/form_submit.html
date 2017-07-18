@@ -1,0 +1,38 @@
+<html>
+    <head>
+        <title>Handle POST requests with Flask</title>
+        <link rel=stylesheet type=text/css href="{{ url_for('static', filename='style.css') }}">
+    </head>
+    <body>
+        <div id="container">
+            <div class="title">
+                <h1>Tweet Labeler</h1>
+            </div>
+            <div id="content">
+                <form method="post" action="{{ url_for('hello') }}">
+                  <ul class=entries>
+                  {% for entry in entries %}
+                    <div class="tweet_tag_div">
+                    <h2> Labeled Tweet </h2>
+
+                    <label class="checkbox-inline">
+                        @{{ entry.user_screen_name }} | Verified {{ entry.user_verified }}
+                        <br>
+                        {{ entry.tweet_status }}
+                        <br>
+                      <input type="radio" name={{ entry.id }} value="t">Is relevant
+                      <input type="radio" checked="checked" name={{ entry.id }} value="f">Not relevant
+                      <input type="radio" name={{ entry.id }} value="m">Retweet relevant
+                    </label>
+                    </div>
+                  {% else %}
+                    <li><em>Unbelievable. There are no data points to label.</em>
+                  {% endfor %}
+                  </ul>
+                  <input type="submit" />
+                </form>
+            </div>
+        </div>
+    </body>
+</html>
+ 
