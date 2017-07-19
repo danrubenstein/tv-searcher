@@ -1,6 +1,6 @@
 <html>
     <head>
-        <title>Handle POST requests with Flask</title>
+        <title>Tweet Labeler</title>
         <link rel=stylesheet type=text/css href="{{ url_for('static', filename='style.css') }}">
     </head>
     <body>
@@ -22,7 +22,6 @@
                         <br>
                       <input type="radio" name={{ entry.id }} value="t">Is relevant
                       <input type="radio" checked="checked" name={{ entry.id }} value="f">Not relevant
-                      <input type="radio" name={{ entry.id }} value="m">Retweet relevant
                     </label>
                     </div>
                   {% else %}

@@ -27,18 +27,19 @@ def load_set_to_label():
 		"""
 		select * from label_data.tweets_not_labeled 
 		where label_in_process is False
-		limit 25
+		and user_verified is False
+		limit 1
 		""", PG_ENGINE).to_dict('records')
 
 
 	id_list = list([x['id'] for x in df])
-
-	query = """
-	UPDATE label_data.tweets_not_labeled
-	SET label_in_process = True
-	WHERE id in %s
-	"""
-	args = [(tuple(id_list),)]
-	PG_CONNECTION.execute(query, args)
+	if len(id_list) > 0:
+		query = """
+		UPDATE label_data.tweets_not_labeled
+		SET label_in_process = True
+		WHERE id in %s
+		"""
+		args = [(tuple(id_list),)]
+		PG_CONNECTION.execute(query, args)
 
 	return df
