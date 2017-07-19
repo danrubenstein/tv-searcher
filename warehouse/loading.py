@@ -13,8 +13,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 
-dotenv_path = os.path.join(os.path.dirname(__file__)+"/../", '.env')
-load_dotenv(dotenv_path)
+
 
 
 def load_resources_from_server():
@@ -96,7 +95,10 @@ def process_for_label_pipeline(tweet_df, pg_engine, pg_connection):
 
 if __name__ == "__main__":
 
-	# load_resources_from_server()
+	dotenv_path = os.path.join(os.path.dirname(__file__)+"../", '.env')
+	load_dotenv(dotenv_path)
+
+	load_resources_from_server()
 
 	connection_string = 'postgresql://{}:{}@localhost:5432/{}'.format(os.environ['PG_USERNAME'], 
 		os.environ['PG_PASSWORD'], os.environ['PG_DATABASE'])
