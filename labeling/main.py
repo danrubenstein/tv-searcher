@@ -13,21 +13,21 @@ PORT = 8000
 app = Flask(__name__)
 app.tear_downfunctions = []
 
-# Define a route for the default URL, which loads the form
+
 @app.route('/')
 def form():
     entries = load_set_to_label()
     return render_template('form_submit.html', entries=entries)
 
-# Define a route for the action of the form, for example '/hello/'
-# We are also defining which type of requests this route is 
-# accepting: POST requests in this case
-@app.route('/hello/', methods=['POST'])
 
+@app.route('/hello/', methods=['POST'])
 def hello():
 
     form_as_dict = request.form.to_dict()
+    
+    keep_labeling = (form_as_dict.pop('Continue?', None) == 't')
 
+    print(form_as_dict.keys())
     relevant_examples = [int(key) for key in form_as_dict.keys() if form_as_dict[key] == 't']
     non_relevant_examples = [int(key) for key in form_as_dict.keys() if form_as_dict[key] == 'f']
     
@@ -42,28 +42,23 @@ def hello():
         DELETE from label_data.tweets_not_labeled
         WHERE id in %s
         """
-    args = [(tuple(list(labels_df['id'])),)]
+    args = [(tuple([int(x) for x in list(labels_df['id'])]),)]
     PG_CONNECTION.execute(query, args)
 
-    return redirect('/')
+    if keep_labeling:
+        return redirect('/')
+    else:
+        return redirect('/thanks/')
 
-def x():
-    print('ping!!')
+@app.route('/thanks/')
+def thanks(): 
+    return render_template('thanks.html')
 
-app.tear_downfunctions.append(x)
 
 if __name__ == '__main__':
 
-    try:
-        app.run( 
-            host="0.0.0.0",
-            port=int("8080")
-        )
-    except KeyboardInterrupt:
-        print('ping')
-        query = """
-        UPDATE label_data.tweets_not_labeled
-        SET label_in_process = False
-        WHERE label_in_process = True
-        """
-        PG_CONNECTION.execute(query)
+    app.run( 
+        host="0.0.0.0",
+        port=int("8080")
+    )
+    
