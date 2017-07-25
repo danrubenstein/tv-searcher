@@ -8,19 +8,21 @@ import numpy as np
 import pickle
 from sklearn.ensemble import RandomForestClassifier
 
-from ..utils import load_tweets_as_dataframe, get_tweet_status_cleaned
+from ..utils import load_tweets_as_dataframe, prepare_tweets_for_modeling
 from .time_searching import get_time_searching
-from .account_finding import get_account_finding	
+from .account_finding import generate_account_frequency_tf_idf, get_account_finding
+from .word_frequency import generate_word_frequency_tf_idf, get_token_finding
 
 
-model_preprocessing_functions = [get_account_finding, get_time_searching]
+model_preprocessing_functions = [get_account_finding, get_time_searching, get_token_finding]
+
 id_columns = ['id', 'tweet_created_at', 'tweet_status', 'user_id', 'user_screen_name',
        'user_verified', 'label_priority', 'label', 'tweet_status_cleaned', 'tweet_status_cleaned']
 
 
 unlabeled_id_cols = ['search_term_raw','search_term_input','tweet_id','user_followers', 'user_following']
 
-def get_latest_model():
+def get_latest_model(update_resources=True):
 	
 	labeled_df = load_tweets_as_dataframe(labels='only')
 	
@@ -28,6 +30,12 @@ def get_latest_model():
 		print("There's not any data to model from, finishing...")
 		return 
 	
+	prepare_tweets_for_modeling(labeled_df)
+	
+	if update_resources:
+		generate_word_frequency_tf_idf()
+		generate_account_frequency_tf_idf()
+
 	for f in model_preprocessing_functions:
 		labeled_df = f(labeled_df)
 
@@ -48,6 +56,9 @@ def get_latest_model():
 	for f in labeled_df_filtered.columns.values:
 		model_cols_file.write("{}\n".format(f))
 	model_cols_file.close()
+
+	if rescore_pipeline:
+		unlabeled_df
 
 
 	return None

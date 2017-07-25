@@ -9,20 +9,16 @@ import pandas as pd
 import numpy as np
 import os
 
-from ..utils import load_tweets_as_dataframe
+from ..utils import load_tweets_as_dataframe, prepare_tweets_for_modeling
 
-def get_account_network_pairings(tweet_statuses, networks, tags_max=4, tags_start_max=3):
+def get_account_network_pairings(tweets_df, networks, tags_max=4, tags_start_max=3):
 
 	'''
 	Identify frequent personality network pairings using a loose tf-idf strategy
 	'''
 
 	tweet_statuses = tweets_df[(tweets_df['tag_tokens'] <= tags_max) & 
-								(tweets_df['tag_tokens_starting'] <= tags_start_max) &
-								(~tweets_df['tweet_contained_elsewhere'])]['tweet_status_cleaned'].drop_duplicates()
-
-	
-	print(len(tweet_statuses))
+								(tweets_df['tag_tokens_starting'] <= tags_start_max)]['tweet_status_cleaned'].drop_duplicates()
 
 	# Generating a "corpus"
 	network_frequencies = []
@@ -63,7 +59,8 @@ def get_account_network_pairings(tweet_statuses, networks, tags_max=4, tags_star
 
 def update_search_accounts(pairings, tweet_df, n_accounts_to_search):
 
-	f = open("../resources/accounts.txt", 'w+')
+	account_filepath = os.path.join(os.path.dirname(__file__), "../resources/accounts.txt")	
+	f = open(account_filepath, 'w+')
 	accounts = list(pd.Series([x['account'] for x in sorted(pairings, key=lambda x: -x['tf_idf'])]).drop_duplicates())
 	
 	count = 0 
@@ -78,20 +75,21 @@ def update_search_accounts(pairings, tweet_df, n_accounts_to_search):
 	f.close()
 
 
-def generate_tf_idf(update=True):
+def generate_account_frequency_tf_idf():
 	
 	tweets_df = load_tweets_as_dataframe()
+	prepare_tweets_for_modeling(tweets_df)
 	networks = ["msnbc", "cnn", "pbs", "fox", "cnbc"]
 
 	# Implement TF-IDF strategy
 	pairings = get_account_network_pairings(tweets_df, networks, tags_max=4, tags_start_max=1)
 	biggest_tf_idf = sorted(pairings, key=lambda x: -x['tf_idf'])[:100]
 	
-	if update:
-		f = open("resources/tf_idf.json", 'w') 
-		json.dump({'result' : biggest_tf_idf}, f)
-		f.close()
-		update_search_accounts(pairings, tweets_df, 25)
+	account_tfidf_filepath = os.path.join(os.path.dirname(__file__), "resources/account_tf_idf.json")	
+	f = open(account_tfidf_filepath, 'w') 
+	json.dump({'result' : biggest_tf_idf}, f)
+	f.close()
+	update_search_accounts(pairings, tweets_df, 25)
 
 
 def search_tweets_for_account(tweets_df, account_name):
@@ -100,8 +98,7 @@ def search_tweets_for_account(tweets_df, account_name):
 	'''
 	return tweets_df[(tweets_df['tweet_status_cleaned'].str.contains(account_name)) 
 							& (tweets_df['tag_tokens'] <= 4) 
-							& (tweets_df['tag_tokens_starting'] <= 0)
-							& (~tweets_df['tweet_contained_elsewhere'])]['tweet_status_cleaned'].drop_duplicates()
+							& (tweets_df['tag_tokens_starting'] <= 0)]['tweet_status_cleaned'].drop_duplicates()
 
 
 def get_max_tf_idf(status, tf_idf, force_network_match=True):
@@ -115,16 +112,13 @@ def get_max_tf_idf(status, tf_idf, force_network_match=True):
 	return 0 
 
 
-
 def get_account_tf_idf(tweets_df):
 	'''
 	From a given file of tf-idf values... impute max into statuses
 	'''
-	tfidf_filepath = os.path.join(os.path.dirname(__file__), "resources/tf_idf.json")
-	
+	account_tfidf_filepath = os.path.join(os.path.dirname(__file__), "resources/account_tf_idf.json")	
+	tf_idf = json.load(open(account_tfidf_filepath))['result']
 
-
-	tf_idf = json.load(open(tfidf_filepath))['result']
 	tweets_df['accounts_tf_idf1'] = tweets_df['tweet_status_cleaned'].apply(lambda x: get_max_tf_idf(x, tf_idf))
 	tweets_df['accounts_tf_idf2'] = tweets_df['tweet_status_cleaned'].apply(lambda x: get_max_tf_idf(x, tf_idf, force_network_match=False))
 
@@ -144,7 +138,7 @@ def get_network_presence(tweets_df):
 
 def get_account_finding(tweets_df):
 	'''
-	Apply all pre-processing
+	Apply all account pre-processing
 	'''
 	a = tweets_df
 	functions = [get_account_tf_idf, get_network_presence]
