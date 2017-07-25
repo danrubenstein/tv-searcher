@@ -1,5 +1,5 @@
 import pandas as pd 
-from utils import load_tweets_as_dataframe
+from ..utils import load_tweets_as_dataframe
 
 def get_spam_retweets(tweet_statuses):
 	

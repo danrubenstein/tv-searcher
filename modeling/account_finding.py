@@ -2,11 +2,14 @@
 Strategies to find relevant accounts to search for
 '''
 import re 
+import json
+import pickle
 
 import pandas as pd 
 import numpy as np
+import os
 
-from utils import load_tweets_as_dataframe
+from ..utils import load_tweets_as_dataframe
 
 def get_account_network_pairings(tweet_statuses, networks, tags_max=4, tags_start_max=3):
 
@@ -75,6 +78,22 @@ def update_search_accounts(pairings, tweet_df, n_accounts_to_search):
 	f.close()
 
 
+def generate_tf_idf(update=True):
+	
+	tweets_df = load_tweets_as_dataframe()
+	networks = ["msnbc", "cnn", "pbs", "fox", "cnbc"]
+
+	# Implement TF-IDF strategy
+	pairings = get_account_network_pairings(tweets_df, networks, tags_max=4, tags_start_max=1)
+	biggest_tf_idf = sorted(pairings, key=lambda x: -x['tf_idf'])[:100]
+	
+	if update:
+		f = open("resources/tf_idf.json", 'w') 
+		json.dump({'result' : biggest_tf_idf}, f)
+		f.close()
+		update_search_accounts(pairings, tweets_df, 25)
+
+
 def search_tweets_for_account(tweets_df, account_name):
 	'''
 	this is easier
@@ -84,23 +103,55 @@ def search_tweets_for_account(tweets_df, account_name):
 							& (tweets_df['tag_tokens_starting'] <= 0)
 							& (~tweets_df['tweet_contained_elsewhere'])]['tweet_status_cleaned'].drop_duplicates()
 
-							
-if __name__ == "__main__":
+
+def get_max_tf_idf(status, tf_idf, force_network_match=True):
+	'''
+	Assume tf_idf is sorted high to low
+	'''
+	for i in range(len(tf_idf)):
+		if tf_idf[i]['account'] in status:
+			if not force_network_match or tf_idf[i]['network'] in status:
+				return tf_idf[i]["tf_idf"] 
+	return 0 
+
+
+
+def get_account_tf_idf(tweets_df):
+	'''
+	From a given file of tf-idf values... impute max into statuses
+	'''
+	tfidf_filepath = os.path.join(os.path.dirname(__file__), "resources/tf_idf.json")
 	
-	tweets_df = load_tweets_as_dataframe()
+
+
+	tf_idf = json.load(open(tfidf_filepath))['result']
+	tweets_df['accounts_tf_idf1'] = tweets_df['tweet_status_cleaned'].apply(lambda x: get_max_tf_idf(x, tf_idf))
+	tweets_df['accounts_tf_idf2'] = tweets_df['tweet_status_cleaned'].apply(lambda x: get_max_tf_idf(x, tf_idf, force_network_match=False))
+
+	return tweets_df
+
+
+def get_network_presence(tweets_df):
+	'''
+	Contains network reference
+	'''
 	networks = ["msnbc", "cnn", "pbs", "fox", "cnbc"]
+	for network in networks:
+		tweets_df["accounts_{}".format(network)] = tweets_df['tweet_status_cleaned'].str.contains(network)
 
-	# Implement TF-IDF strategy
-	pairings = get_account_network_pairings(tweets_df, networks, tags_max=4, tags_start_max=1)
-	biggest_tf_idf = sorted(pairings, key=lambda x: -x['tf_idf'])[:100]
+	return tweets_df
 
-	for i in biggest_tf_idf:
-		pass
-		x = len(search_tweets_for_account(tweets_df, i['account']))
-		if x > 0:
-			print(i, x)
-			print(search_tweets_for_account(tweets_df, i['account']))
 
-	# Update search
-	if False:
-		update_search_accounts(pairings, tweets_df, 25)
+def get_account_finding(tweets_df):
+	'''
+	Apply all pre-processing
+	'''
+	a = tweets_df
+	functions = [get_account_tf_idf, get_network_presence]
+	for f in functions:
+		a = f(a)
+
+	return a
+
+
+
