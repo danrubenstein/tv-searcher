@@ -1,7 +1,3 @@
-''' 
-Script / function to download csv files and transform into SQL tables
-'''
-
 import datetime
 import os 
 import shutil
@@ -9,14 +5,14 @@ import subprocess
 import uuid
 
 import pandas as pd
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
-from ..modeling.model_labeling import score_unlabeled_tweets
 from .. import PG_ENGINE, PG_CONNECTION
-from ..utils import get_tweet_status_cleaned, get_ordered_tag_tokens
+from ..modeling.model_labeling import score_unlabeled_tweets
+from ..utils import prepare_tweets_for_modeling
 
 execute = True
+
 
 def load_resources_from_server():
 	
@@ -88,13 +84,10 @@ def process_for_label_pipeline(tweet_df):
 	tweet_df.sort_values("tweet_created_at", inplace=True)
 	tweet_df.drop_duplicates("tweet_status", inplace=True)
 
-	tweet_df['tweet_status_cleaned'] = tweet_df['tweet_status'].apply(get_tweet_status_cleaned)
-	tweet_df['tag_tokens'] = tweet_df['tweet_status_cleaned'].apply(lambda x: len([x for x in x.split() if x[0] in ["#", "@"] and len(x) > 1]))
-	tweet_df['tag_tokens_starting'] = tweet_df['tweet_status_cleaned'].apply(lambda x: get_ordered_tag_tokens(x))
-
+	prepare_tweets_for_modeling(tweet_df)
 	tweet_df['priority'] = score_unlabeled_tweets(tweet_df)
-
-	tweet_df.drop('tweet_status_cleaned', axis=1, inplace=True)
+	
+	tweet_df.drop(['tweet_status_cleaned', 'tag_tokens', 'tag_tokens_starting'], axis=1, inplace=True)
 
 	if execute:
 		tweet_df.to_sql("staging_tweet_data", PG_ENGINE, 
@@ -115,7 +108,7 @@ def run_loading_process():
 
 	available_files, resource_directory = get_available_tweet_csvs()
 	print(available_files)
-	for file in available_files[:3]:
+	for file in available_files[:1]:
 		print("adding file: {}".format(file))
 		process_tweet_csv(file, resource_directory)
 

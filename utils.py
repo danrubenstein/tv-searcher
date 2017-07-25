@@ -56,9 +56,17 @@ def get_tweet_status_cleaned(status):
 
 	rt_strip = ":".join(status.split(":")[1:]).strip() if status[:2] == "RT" else status
 	lower = rt_strip.lower()
-	extension_strip = rt_strip.rstrip('…')
 
-	return extension_strip
+	return lower
+
+
+def prepare_tweets_for_modeling(tweet_df):
+
+	tweet_df['tweet_status_cleaned'] = tweet_df['tweet_status'].str.replace('[^\x00-\x7F]','')
+	tweet_df['tweet_status_cleaned'] = tweet_df['tweet_status_cleaned'].apply(get_tweet_status_cleaned)
+	tweet_df['tag_tokens'] = tweet_df['tweet_status_cleaned'].apply(lambda x: len([x for x in x.split() if x[0] in ["#", "@"] and len(x) > 1]))
+	tweet_df['tag_tokens_starting'] = tweet_df['tweet_status_cleaned'].apply(lambda x: get_ordered_tag_tokens(x))
+
 
 def load_tweets_as_dataframe(labels=None):
 
@@ -71,24 +79,17 @@ def load_tweets_as_dataframe(labels=None):
 		df = pd.read_sql("""
 			select a.*, b.label from label_data.tweets_in_pipeline a 
 			left join label_data.tweets_labeled b on a.id = b.id""", PG_ENGINE)
+
 	elif labels == "unlabeled":
 		df = pd.read_sql("""
 			select * from label_data.tweets_in_pipeline 
 			where id not in (select id from label_data.tweets_labeled)""", PG_ENGINE)
+
 	else:
 		df = pd.read_sql("""
 			select * from label_data.tweets_in_pipeline a 
 			""", PG_ENGINE)
 	
-		
-	df['tweet_status_cleaned'] = df['tweet_status'].apply(get_tweet_status_cleaned)
-
-	adj_statuses = df['tweet_status_cleaned'].drop_duplicates().values
-
-	# df['tweet_contained_elsewhere'] = df['tweet_status_cleaned'].apply(lambda x: get_contained_elsewhere(x, adj_statuses))
-	df['tag_tokens'] = df['tweet_status_cleaned'].apply(lambda x: len([x for x in x.split() if x[0] in ["#", "@"] and len(x) > 1]))
-	df['tag_tokens_starting'] = df['tweet_status_cleaned'].apply(lambda x: get_ordered_tag_tokens(x))
-
 	return df
 
 
