@@ -8,7 +8,6 @@ def load_set_to_label():
 		"""
 		select * from label_data.tweets_not_labeled 
 		where label_in_process is False
-		and user_verified is True
 		order by label_priority
 		limit 100
 		""", PG_ENGINE).to_dict('records')
@@ -56,8 +55,10 @@ def get_tweet_status_cleaned(status):
 
 	rt_strip = ":".join(status.split(":")[1:]).strip() if status[:2] == "RT" else status
 	lower = rt_strip.lower()
+	amp_fix = lower.replace('&amp;','')
+	url_strip = " ".join([x for x in amp_fix.split() if "http" != x[:4]])
 
-	return lower
+	return url_strip
 
 
 def prepare_tweets_for_modeling(tweet_df):
