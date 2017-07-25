@@ -13,9 +13,6 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 
-
-
-
 def load_resources_from_server():
 	
 	raw_directory = "tmp-resource-"+str(uuid.uuid4())
