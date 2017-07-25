@@ -5,7 +5,8 @@ import datetime
 import pandas as pd 
 from flask import Flask, render_template, request, url_for, redirect
 
-from utils import load_set_to_label, PG_ENGINE, PG_CONNECTION
+from .. import PG_CONNECTION, PG_ENGINE
+from ..utils import load_set_to_label
 
 PORT = 8000
 
@@ -55,7 +56,7 @@ def thanks():
     return render_template('thanks.html')
 
 
-if __name__ == '__main__':
+def run_labeling_app():
 
     app.run( 
         host="0.0.0.0",
