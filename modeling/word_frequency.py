@@ -9,15 +9,21 @@ import os
 
 from ..utils import load_tweets_as_dataframe, prepare_tweets_for_modeling
 
-def get_word_frequency_tf_idf(df, tags_max=4, tags_start_max=1):
+
+def find_ngrams(input_string, n):
+	input_list = input_string.split()
+	return [" ".join(x) for x in list(zip(*[input_list[i:] for i in range(n)]))]
+
+
+def get_ngram_frequency_tf_idf(df, n, tags_max=4, tags_start_max=1):
 	
-	relevant_counts = df[df['label'] == 1]['tweet_status_cleaned'].apply(lambda x: pd.value_counts(x.split())).sum(axis = 0)
-	unrelevant_counts =  df[df['label'] == 0]['tweet_status_cleaned'].apply(lambda x: pd.value_counts(x.split())).sum(axis = 0)
+	relevant_counts = df[df['label'] == 1]['tweet_status_cleaned'].apply(lambda x: pd.value_counts(find_ngrams(x, n))).sum(axis = 0)
+	unrelevant_counts =  df[df['label'] == 0]['tweet_status_cleaned'].apply(lambda x: pd.value_counts(find_ngrams(x, n))).sum(axis = 0)
 
 	relevance_frequencies = [(1, relevant_counts), (0, unrelevant_counts)]
-
+	print(relevance_frequencies)
 	all_words = sorted(list(set([y for (a,x) in relevance_frequencies for y in list(x.index)])))
-
+	print(all_words[:25])
 	stat_dicts = []
 	n_docs = len(relevance_frequencies)
 
@@ -46,14 +52,17 @@ def generate_word_frequency_tf_idf():
 
 	tweets_df = load_tweets_as_dataframe(labels="only")
 	prepare_tweets_for_modeling(tweets_df)
-	pairings = get_word_frequency_tf_idf(tweets_df)
-	max_relevant = sorted([x for x in pairings if x['tweet_relevant'] == 1], key=lambda x: -x['tf_idf'])[:100]
-	max_nonrelevant = sorted([x for x in pairings if x['tweet_relevant'] == 0], key=lambda x: -x['tf_idf'])[:100]
-	biggest_word_tf_idf = max_relevant + max_nonrelevant
+	n_gram_stats = {}
+	for i in range(1,4):
+		pairings = get_ngram_frequency_tf_idf(tweets_df, i)
+		max_relevant = sorted([x for x in pairings if x['tweet_relevant'] == 1], key=lambda x: -x['tf_idf'])[:100]
+		max_nonrelevant = sorted([x for x in pairings if x['tweet_relevant'] == 0], key=lambda x: -x['tf_idf'])[:100]
+		biggest_word_tf_idf = max_relevant + max_nonrelevant
+		n_gram_stats[i] = biggest_word_tf_idf
 	
-	resource_filepath = os.path.join(os.path.dirname(__file__), "resources/word_tf_idf.json")	
+	resource_filepath = os.path.join(os.path.dirname(__file__), "resources/ngram_tf_idf.json")	
 	f = open(resource_filepath, 'w') 
-	json.dump({'result' : biggest_word_tf_idf}, f)
+	json.dump(n_gram_stats, f)
 	f.close()
 
 
@@ -76,20 +85,25 @@ def get_word_tf_idf(tweets_df):
 	From a given file of word tf-idf values... impute max and sum into statuses
 	'''
 
-	tfidf_filepath = os.path.join(os.path.dirname(__file__), "resources/word_tf_idf.json")
-	tf_idf = json.load(open(tfidf_filepath))['result']
+	tfidf_filepath = os.path.join(os.path.dirname(__file__), "resources/ngram_tf_idf.json")
+	tf_idf = json.load(open(tfidf_filepath))
 	
-	tweets_df['word_relevant_tf_idf_max'] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
-		get_word_tf_idf_from_status(x, tf_idf, for_relevant=1))
-	tweets_df['word_relevant_tf_idf_sum'] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
-		get_word_tf_idf_from_status(x, tf_idf, for_relevant=1, cumulative=True))
+	for key in tf_idf.keys():
+		print(key)
+		tweets_df['ngram_{}_relevant_tf_idf_max'.format(key)] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
+			get_word_tf_idf_from_status(x, tf_idf[key], for_relevant=1))
+		tweets_df['ngram_{}_relevant_tf_idf_sum'.format(key)] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
+			get_word_tf_idf_from_status(x, tf_idf[key], for_relevant=1, cumulative=True))
 
-	tweets_df['word_nonrelevant_tf_idf_max'] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
-		get_word_tf_idf_from_status(x, tf_idf, for_relevant=0))
-	tweets_df['word_nonrelevant_tf_idf_sum'] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
-		get_word_tf_idf_from_status(x, tf_idf, for_relevant=0, cumulative=True))
+		tweets_df['ngram_{}_nonrelevant_tf_idf_max'.format(key)] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
+			get_word_tf_idf_from_status(x, tf_idf[key], for_relevant=0))
+		tweets_df['ngram_{}_word_nonrelevant_tf_idf_sum'.format(key)] = tweets_df['tweet_status_cleaned'].apply(lambda x: 
+			get_word_tf_idf_from_status(x, tf_idf[key], for_relevant=0, cumulative=True))
 
 	return tweets_df
+
+
+
 
 
 def get_token_finding(tweets_df):

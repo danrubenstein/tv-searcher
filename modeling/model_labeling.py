@@ -57,8 +57,9 @@ def get_latest_model(update_resources=True):
 		model_cols_file.write("{}\n".format(f))
 	model_cols_file.close()
 
-	if rescore_pipeline:
-		unlabeled_df
+	rescore_pipeline = False
+	# if rescore_pipeline:
+	# 	unlabeled_df
 
 
 	return None
