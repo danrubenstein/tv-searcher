@@ -28,7 +28,6 @@ def hello():
     
     keep_labeling = (form_as_dict.pop('Continue?', None) == 't')
 
-    print(form_as_dict.keys())
     relevant_examples = [int(key) for key in form_as_dict.keys() if form_as_dict[key] == 't']
     non_relevant_examples = [int(key) for key in form_as_dict.keys() if form_as_dict[key] == 'f']
     

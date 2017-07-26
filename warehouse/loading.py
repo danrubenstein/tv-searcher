@@ -54,7 +54,7 @@ def process_tweet_csv(tweet_csv_filename, tweet_csv_file_directory):
 	tweetcsv_filepath = os.path.join(tweet_csv_file_directory, tweet_csv_filename)
 	tweetcsv_file = open(tweetcsv_filepath)
 	tweet_frame = pd.DataFrame.from_csv(tweetcsv_file, index_col=None)
-
+	print(len(tweet_frame))
 	# raw records input
 	if execute:
 		tweet_frame.to_sql("scraping_raw_records", PG_ENGINE, 
@@ -76,21 +76,20 @@ def process_tweet_csv(tweet_csv_filename, tweet_csv_file_directory):
 	return "Success"
 
 
-def process_for_label_pipeline(tweet_df):
+def process_for_label_pipeline(tweets_df):
 	'''
 	Add the entries to the label_data pipeline
 	'''
+	tweets_df.sort_values("tweet_created_at", inplace=True)
+	tweets_df.drop_duplicates("tweet_status", inplace=True)
 
-	tweet_df.sort_values("tweet_created_at", inplace=True)
-	tweet_df.drop_duplicates("tweet_status", inplace=True)
-
-	prepare_tweets_for_modeling(tweet_df)
-	tweet_df['priority'] = score_unlabeled_tweets(tweet_df)
-	
-	tweet_df.drop(['tweet_status_cleaned', 'tag_tokens', 'tag_tokens_starting'], axis=1, inplace=True)
+	original_columns = list(tweets_df.columns.values) + ['priority']
+	prepare_tweets_for_modeling(tweets_df)
+	tweets_df['priority'] = score_unlabeled_tweets(tweets_df)
+	tweets_df.drop([x for x in tweets_df.columns.values if x not in original_columns], axis=1, inplace=True)
 
 	if execute:
-		tweet_df.to_sql("staging_tweet_data", PG_ENGINE, 
+		tweets_df.to_sql("staging_tweet_data", PG_ENGINE, 
 								schema="label_data", if_exists="fail", index=False)
 
 	if execute:
@@ -108,7 +107,7 @@ def run_loading_process():
 
 	available_files, resource_directory = get_available_tweet_csvs()
 	print(available_files)
-	for file in available_files[:1]:
+	for file in available_files:
 		print("adding file: {}".format(file))
 		process_tweet_csv(file, resource_directory)
 
