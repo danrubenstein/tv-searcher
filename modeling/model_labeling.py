@@ -17,11 +17,13 @@ from .time_searching import get_time_searching
 from .account_finding import generate_account_frequency_tf_idf, get_account_finding
 from .word_frequency import generate_word_frequency_tf_idf, get_token_finding, get_corpus_first_word_frequencies
 from .timeline_searching import get_search_timelines
+from .nlp_relevance import set_word2vec_scores, get_word2vec_models
 
 
 model_preprocessing_functions = [get_account_finding, 
 									get_time_searching, 
-									get_token_finding]
+									get_token_finding, 
+									set_word2vec_scores]
 
 id_columns = ['id', 'tweet_created_at', 'tweet_status', 'user_id', 
 				'user_screen_name', 'label_priority', 'label', 
@@ -45,6 +47,7 @@ def get_latest_model(update_modeling_resources=True):
 		generate_word_frequency_tf_idf()
 		generate_account_frequency_tf_idf()
 		get_corpus_first_word_frequencies()
+		get_word2vec_models()
 
 	for f in model_preprocessing_functions:
 		labeled_df = f(labeled_df)
