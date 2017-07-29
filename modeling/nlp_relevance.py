@@ -41,4 +41,6 @@ def set_word2vec_scores(df):
 		model = Word2Vec.load(model_filepath)
 		set_word2vec_score_for_model(model, df, i)
 
+	df['word2vec_relevant_diff'] = df['word2vec_relevant_0'] - df['word2vec_relevant_1']
+
 	return df
