@@ -7,18 +7,25 @@ import os
 from urllib.parse import quote_plus
 from base64 import b64encode
 import datetime
+import json
 
 import boto3
 import requests
 
-def load_resources(filename):
-    '''
-    Load .env files
-    '''
-    for i in open(filename).readlines():
-        if len(i) > 2 and i[0] != "#":
-            [key, value] = "".join(i.split()).split("=")
-            os.environ[key] = value
+network_resource_file = 'networks.txt'
+search_term_resource_file = 'exactableSearchTerms.txt'
+account_resource_file = 'accounts.txt'
+user_timeline_resource_file = "user_timelines.txt"
+term_id_reference_resource_file = 'term_id_reference.json'
+
+temp_folder = "/tmp"
+# temp_folder = "tmp-folder" # For local testing
+
+resource_files = [network_resource_file,
+                    search_term_resource_file,
+                    account_resource_file,
+                    user_timeline_resource_file,
+                    term_id_reference_resource_file]
 
 
 def get_app_only_auth_token(consumer_key, consumer_secret):
@@ -46,7 +53,7 @@ def get_app_only_auth_token(consumer_key, consumer_secret):
     return bearer_credentials
 
 
-def get_search_query(key, search_string, result_type='recent'):
+def get_search_query(key, search_string, result_type='recent', max_id=None, since_id=None):
     '''
     Run a simple get request from the search_string
     '''
@@ -64,7 +71,15 @@ def get_search_query(key, search_string, result_type='recent'):
         'result_type' : result_type
     }
 
+    if max_id is not None:
+        params['max_id'] = max_id
+    if since_id is not None:
+        params['since_id'] = since_id
+
+    print(params)
+
     res = requests.get(url, params=params, headers=get_headers)
+
     if not res.ok: 
         print(res.text)
         return None
@@ -95,6 +110,23 @@ def get_user_timeline_query(key, user_id):
     return res.json()
 
 
+def get_resource_limits_query(key):
+    
+    get_headers = {
+        'Authorization' : 'Bearer ' + key, 
+    }
+
+    url = "https://api.twitter.com/1.1/application/rate_limit_status.json"
+    params = {
+        "resources" : "users,search"
+    }
+
+    res = requests.get(url, params=params, headers=get_headers)
+    if not res.ok: 
+        print(res.text)
+        return None
+
+    return res.json()
 
 
 def clean_tweet_data(raw_statuses, search_term_raw, search_term_input):
@@ -133,7 +165,6 @@ def load_search_resources(filename):
     Prepares abstract network information (networks, shownames, userids)
     """
     search_resources = open(filename).read().split()
-    search_resources = [x for x in search_resources if x.strip()[0] is not "#"]
     return search_resources
 
 
@@ -163,9 +194,130 @@ def load_search_terms(filename, networks=[''], accounts=[''], search_as_exact="l
     elif search_as_exact == "loose":
         pass    
 
-    print(collected_queries)
-
     return collected_queries
+
+
+def load_search_resource_files(client):
+
+    for resource_file in resource_files:
+        client.download_file(os.environ['S3_BUCKET_NAME'], 
+                'tv-searcher/resources/{}'.format(resource_file), 
+                '{}/{}'.format(temp_folder, resource_file))
+
+    return
+
+
+def get_search_terms():
+
+    networks = load_search_resources("{}/{}".format(temp_folder, network_resource_file))
+    accounts = load_search_resources("{}/{}".format(temp_folder, account_resource_file))
+    user_timeline_accounts = load_search_resources("{}/{}".format(temp_folder, user_timeline_resource_file))
+    search_terms = load_search_terms("{}/{}".format(temp_folder, search_term_resource_file), networks, accounts)
+    reference_tweet_search_ids = json.load(open("{}/{}".format(temp_folder, term_id_reference_resource_file)))
+
+    return search_terms, reference_tweet_search_ids, user_timeline_accounts
+
+
+def get_remaining_searches_dict(client):
+
+    search_status_filename = "search_status.json"
+    client.download_file(os.environ['S3_BUCKET_NAME'], 
+                'tv-searcher/resources/{}'.format(search_status_filename), 
+                '{}/{}'.format(temp_folder, search_status_filename))
+
+    with open('{}/{}'.format(temp_folder, search_status_filename)) as f:
+        remaining_searches_dict = json.load(f)
+        return remaining_searches_dict
+
+
+def get_term_search(term, twitter_credential, reference_id=None):
+
+    cleaned_tweets = []
+    oldest_in_search = None
+    max_term_id = None
+    latest_in_search = None
+    counter = 0
+    
+    if reference_id is None:
+        reference_id = 0
+    
+    while ((oldest_in_search is None or oldest_in_search >= reference_id)
+            and counter <= 4):
+
+        result = get_search_query(twitter_credential, term[1], max_id=oldest_in_search, since_id=reference_id)
+
+        if result is not None:
+            latest_in_search = result['search_metadata']['max_id']
+            
+
+            cleaned_tweets += clean_tweet_data(result['statuses'], term[0], term[1])
+            if counter == 0:
+                max_term_id = latest_in_search
+            counter += 1
+        else:
+
+            print("error in search for search term {} with max_id {}".format(term, oldest_in_search))
+            return cleaned_tweets, max_term_id, oldest_in_search, True
+
+        try:
+            oldest_in_search = int(result['search_metadata']['next_results'].split("max_id=")[1].split("&")[0])
+        except KeyError:
+            return cleaned_tweets, max_term_id, oldest_in_search, False
+            
+    return cleaned_tweets, max_term_id, oldest_in_search, False
+
+
+def process_reference_id_files(client, reference_tweet_search_ids, latest_tweet_search_ids):
+
+    for key in reference_tweet_search_ids.keys():
+        if key not in latest_tweet_search_ids.keys():
+            latest_tweet_search_ids[key] = reference_tweet_search_ids[key]
+
+    id_reference_filepath = "{}/{}".format(temp_folder, term_id_reference_resource_file)
+    with open(id_reference_filepath, 'w') as id_file:
+        json.dump(latest_tweet_search_ids, id_file)
+        
+    client.upload_file(id_reference_filepath, os.environ['S3_BUCKET_NAME'], 
+                            'tv-searcher/resources/{}'.format(term_id_reference_resource_file))  
+
+    return 
+
+
+def upload_search_status(client, search_status_dict):
+
+    search_status_filename = "search_status.json"
+    search_status_path = "{}/{}".format(temp_folder, search_status_filename)
+    search_file = open(search_status_path, 'w')
+    json.dump(search_status_dict, search_file)
+    search_file.close()
+
+    client.upload_file(search_status_path, 
+                        os.environ['S3_BUCKET_NAME'], 
+                        'tv-searcher/resources/{}'.format(search_status_filename))
+
+    print("here!")
+
+    return
+
+
+def upload_output(client, tweet_output):
+
+    output_filename = "output_{}.csv".format(str(datetime.datetime.now()))
+    output_path = "{}/{}".format(temp_folder, output_filename)
+
+    with open(output_path, 'w') as csvfile:
+        fieldnames = tweet_output[0].keys()
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for item in tweet_output:
+            writer.writerow(item)
+
+    client.upload_file(output_path, 
+                        os.environ['S3_BUCKET_NAME'], 
+                        'tv-searcher/downloads/{}'.format(output_filename))
+
+    return
 
 
 def handler(event, context):
@@ -173,61 +325,74 @@ def handler(event, context):
     Lambda execution
     '''
 
-    client = boto3.client('s3')
+    s3_client = boto3.client('s3')
+    load_search_resource_files(s3_client)
     
-    network_resource_file = 'networks.txt'
-    client.download_file(os.environ['S3_BUCKET_NAME'], 
-            'tv-searcher/resources/{}'.format(network_resource_file), 
-            '/tmp/{}'.format(network_resource_file))
+    credential = get_app_only_auth_token(os.environ['TWITTER_CONSUMER_TOKEN'], os.environ['TWITTER_CONSUMER_SECRET'])
 
-    search_term_resource_file = 'exactableSearchTerms.txt'
-    client.download_file(os.environ['S3_BUCKET_NAME'], 
-            'tv-searcher/resources/{}'.format(search_term_resource_file), 
-            '/tmp/{}'.format(search_term_resource_file))
-
-    account_resource_file = 'accounts.txt'
-    client.download_file(os.environ['S3_BUCKET_NAME'], 
-            'tv-searcher/resources/{}'.format(account_resource_file), 
-            '/tmp/{}'.format(account_resource_file))
-
-    user_timeline_resource_file = "user_timelines.txt"
-    client.download_file(os.environ['S3_BUCKET_NAME'], 
-        'tv-searcher/resources/{}'.format(user_timeline_resource_file), 
-        '/tmp/{}'.format(user_timeline_resource_file))
-
-
-    # load_resources(".env")
-    twitter_credential = get_app_only_auth_token(os.environ['TWITTER_CONSUMER_TOKEN'], os.environ['TWITTER_CONSUMER_SECRET'])
-
-    networks = load_search_resources("/tmp/{}".format(network_resource_file))
-    accounts = load_search_resources("/tmp/{}".format(account_resource_file))
-    user_timeline_accounts = load_search_resources("/tmp/{}".format(user_timeline_resource_file))
-    search_terms = load_search_terms("/tmp/{}".format(search_term_resource_file), networks, accounts, search_as_exact="loose")
+    search_status_dict = {}
+    remaining_searches = get_remaining_searches_dict(s3_client)
     
+    if remaining_searches['time'] == 0:
+        search_terms, reference_tweet_search_ids, timeline_accounts = get_search_terms()
+        search_status_dict["time"] = 23
+        print("Hours left {}".format(search_status_dict["time"]))
+    else:
+        if "searches" in remaining_searches.keys():
+            _, reference_tweet_search_ids, _ = get_search_terms()
+            search_terms = remaining_searches["searches"]
+            search_status_dict["time"] = remaining_searches["time"] - 1
+            print("Hours left {}".format(search_status_dict["time"]))
+        else:
+            print("There's nothing to search right now")
+            return
+
     cleaned_tweets = []
+    latest_tweet_search_ids = {}
+
+    search_limit_reached = False
+    search_term_limit = 0
+
+    for i, term in enumerate(search_terms):
+        if term in reference_tweet_search_ids.keys():
+            reference_id = reference_tweet_search_ids[term]
+        else:
+            reference_id = None
+        
+        (results, max_term_id, old_tweet_term_search, rate_limited) = get_term_search(term, credential, reference_id)
+        print("{}, {}".format(old_tweet_term_search, reference_id))
+
+        cleaned_tweets += results
+
+        if max_term_id is not None:
+            latest_tweet_search_ids[term[1]] = max_term_id
+        else:
+            latest_tweet_search_ids[term[1]] = 0
+
+        if rate_limited:
+            search_limit_reached = True
+            search_term_limit = i
+            break
+
+    if search_limit_reached:
+        search_status_dict["searches"] = search_terms[search_term_limit:]
     
-    for term in search_terms:
-        result = get_search_query(twitter_credential, term[1])
-        if result is not None:
-            cleaned_tweets += clean_tweet_data(result['statuses'], term[0], term[1])
+    upload_search_status(s3_client, search_status_dict)
+    process_reference_id_files(s3_client, reference_tweet_search_ids, latest_tweet_search_ids)
+    
 
-    for user in user_timeline_accounts:
-        result = get_user_timeline_query(twitter_credential, int(user))
-        if result is not None:
-            cleaned_tweets += clean_tweet_data(result, "#USERTIMELINE", str(user))
+    if remaining_searches['time'] == 0:
+        for account in timeline_accounts:
+            result = get_user_timeline_query(credential, int(account))
+            if result is not None:
+                cleaned_tweets += clean_tweet_data(result, "#USERTIMELINE", str(account))
+            else:
+                print("missed search for timeline {}".format(account))
 
-    output_filename = "output_{}.csv".format(str(datetime.datetime.now()))
-    output_path = "/tmp/{}".format(output_filename)
+        upload_output(s3_client, cleaned_tweets)
 
-    with open(output_path, 'w') as csvfile:
-        fieldnames = cleaned_tweets[0].keys()
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    return credential
 
-        writer.writeheader()
-        for item in cleaned_tweets:
-            writer.writerow(item)
-
-    client.upload_file(output_path, os.environ['S3_BUCKET_NAME'], 'tv-searcher/downloads/{}'.format(output_filename))
 
     # TODO: invalidate ouath token
         
