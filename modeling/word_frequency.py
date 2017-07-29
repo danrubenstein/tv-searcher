@@ -153,7 +153,8 @@ def get_token_finding(tweets_df):
 	'''
 	a = tweets_df
 
-	functions = [get_word_tf_idf, apply_first_word_frequencies]
+	functions = [apply_first_word_frequencies]
+	# functions = [get_word_tf_idf, apply_first_word_frequencies]
 	for f in functions:
 		a = f(a)
 

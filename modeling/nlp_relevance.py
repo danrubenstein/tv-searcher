@@ -6,10 +6,10 @@ import os
 def get_word2vec_model_for_tweets(relevance):
 
 	df = load_tweets_as_dataframe(labels='only')
-	df = df[df['label']==relevance]
-	
 	prepare_tweets_for_modeling(df)
-	tweets = df['tweet_status_cleaned'].str.split().as_matrix()
+	relevance_df = df[df['label']==relevance].copy()
+
+	tweets = relevance_df['tweet_status_cleaned'].str.split().as_matrix()
 	
 	model = Word2Vec(tweets, hs=1, negative=0)
 	
@@ -37,7 +37,7 @@ def set_word2vec_scores(df):
 
 	# relevant and non-relevant models
 	for i in range(2):
-		model_filepath = os.path.join(os.path.dirname(__file__), "resources/word2vec_relevant_{}".format(1))
+		model_filepath = os.path.join(os.path.dirname(__file__), "resources/word2vec_relevant_{}".format(i))
 		model = Word2Vec.load(model_filepath)
 		set_word2vec_score_for_model(model, df, i)
 

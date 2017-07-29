@@ -48,6 +48,7 @@ def get_latest_model(update_modeling_resources=True):
 		generate_account_frequency_tf_idf()
 		get_corpus_first_word_frequencies()
 		get_word2vec_models()
+		print("updated modeling resources!")
 
 	for f in model_preprocessing_functions:
 		labeled_df = f(labeled_df)
