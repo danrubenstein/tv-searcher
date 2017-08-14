@@ -295,8 +295,6 @@ def upload_search_status(client, search_status_dict):
                         os.environ['S3_BUCKET_NAME'], 
                         'tv-searcher/resources/{}'.format(search_status_filename))
 
-    print("here!")
-
     return
 
 
@@ -320,6 +318,35 @@ def upload_output(client, tweet_output):
     return
 
 
+def get_searches(search_terms, reference_tweet_search_ids, twitter_credential):
+
+    cleaned_tweets = []
+    latest_tweet_search_ids = {}
+
+    search_term_limit = 0
+
+    for i, term in enumerate(search_terms):
+        if term in reference_tweet_search_ids.keys():
+            reference_id = reference_tweet_search_ids[term]
+        else:
+            reference_id = None
+        
+        (results, max_term_id, old_tweet_term_search, rate_limited) = get_term_search(term, twitter_credential, reference_id)
+        print("{}, {}".format(old_tweet_term_search, reference_id))
+
+        cleaned_tweets += results
+
+        if max_term_id is not None:
+            latest_tweet_search_ids[term[1]] = max_term_id
+        else:
+            latest_tweet_search_ids[term[1]] = 0
+
+        if rate_limited:
+            search_term_limit = i
+            break
+
+    return cleaned_tweets, latest_tweet_search_ids, search_term_limit
+
 def handler(event, context):
     '''
     Lambda execution
@@ -332,68 +359,43 @@ def handler(event, context):
 
     search_status_dict = {}
     remaining_searches = get_remaining_searches_dict(s3_client)
-    
-    if remaining_searches['time'] == 0:
+    cleanupHandler = True
+
+    if remaining_searches['time'] == 0 or "searches" in remaining_searches.keys():
+        
+        cleanupHandler = False
         search_terms, reference_tweet_search_ids, timeline_accounts = get_search_terms()
-        search_status_dict["time"] = 23
-        print("Hours left {}".format(search_status_dict["time"]))
-    else:
+        search_status_dict["time"] = 23 
+        
         if "searches" in remaining_searches.keys():
-            _, reference_tweet_search_ids, _ = get_search_terms()
             search_terms = remaining_searches["searches"]
             search_status_dict["time"] = remaining_searches["time"] - 1
-            print("Hours left {}".format(search_status_dict["time"]))
-        else:
-            print("There's nothing to search right now")
-            return
 
-    cleaned_tweets = []
-    latest_tweet_search_ids = {}
-
-    search_limit_reached = False
-    search_term_limit = 0
-
-    for i, term in enumerate(search_terms):
-        if term in reference_tweet_search_ids.keys():
-            reference_id = reference_tweet_search_ids[term]
-        else:
-            reference_id = None
+        print("Hours left {}".format(search_status_dict["time"]))
         
-        (results, max_term_id, old_tweet_term_search, rate_limited) = get_term_search(term, credential, reference_id)
-        print("{}, {}".format(old_tweet_term_search, reference_id))
+        tweet_results, id_results, search_term_result = get_searches(search_terms, reference_tweet_search_ids, credential)
+        
+        if search_term_result:
+            search_status_dict["searches"] = search_terms[search_term_result:]
 
-        cleaned_tweets += results
-
-        if max_term_id is not None:
-            latest_tweet_search_ids[term[1]] = max_term_id
-        else:
-            latest_tweet_search_ids[term[1]] = 0
-
-        if rate_limited:
-            search_limit_reached = True
-            search_term_limit = i
-            break
-
-    if search_limit_reached:
-        search_status_dict["searches"] = search_terms[search_term_limit:]
-    
-    upload_search_status(s3_client, search_status_dict)
-    process_reference_id_files(s3_client, reference_tweet_search_ids, latest_tweet_search_ids)
-    
-
+    else:
+        print("There's nothing to search right now")
+        search_status_dict["time"] = remaining_searches["time"] - 1
+  
     if remaining_searches['time'] == 0:
         for account in timeline_accounts:
             result = get_user_timeline_query(credential, int(account))
             if result is not None:
-                cleaned_tweets += clean_tweet_data(result, "#USERTIMELINE", str(account))
+                tweet_results += clean_tweet_data(result, "#USERTIMELINE", str(account))
             else:
                 print("missed search for timeline {}".format(account))
 
-        upload_output(s3_client, cleaned_tweets)
+    upload_search_status(s3_client, search_status_dict)
 
-    return credential
+    if not cleanupHandler:
+        process_reference_id_files(s3_client, reference_tweet_search_ids, id_results)
+        upload_output(s3_client, tweet_results)
 
-
-    # TODO: invalidate ouath token
+    return
         
 
