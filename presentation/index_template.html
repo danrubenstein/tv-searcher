@@ -1,17 +1,44 @@
 <head>
+<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
 <style>
-.tweet-container {
+.header {
+	padding: 10;
+}
+.container {
+	display: flex;
+	flex-direction: row;
+}
+
+.child-container {
+	flex-grow: 5;
 	align-self: center;
-	justify-content: center;
+}
+
+.content-main {
+	width: 50%;
 }
 
 </style>
+
 </head>
 <body role="document">
-
-<div class="tweet-container">
+<header>
+	<h1 text-align="center">
+	The Talking Heads Wire
+	</h1>
+	<p text-align="center">
+	A quasi automated feed of cable television appearances
+	</p>
+</header>
+<div class='container'>
+<div class='child-container'>
+</div>
+<div class='child-container main'>
 [EMBEDS]
 </div>
-<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+<div class='child-container'>
+</div>
+</div>
+
 
 </body>

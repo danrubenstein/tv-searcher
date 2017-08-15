@@ -20,8 +20,8 @@ def get_url_embed_text(account_name, tweet_id):
 
 	r = requests.get(oembed_url, params=params)
 	if not r.ok:
-		print(r.text)
-		return None
+		# print(r.text)
+		return ""
 	
 	return r.json()["html"]
 
@@ -30,7 +30,6 @@ def get_tweets_for_embedding():
 	# PG_CONNECTION.execute(open(retrieval_filepath).read())
 	retrieval_filepath = os.path.join(os.path.dirname(__file__), "retrieval.sql")
 	df = pd.read_sql(open(retrieval_filepath).read(), PG_ENGINE)
-	print(len(df))
 	embeds = []
 	for index, row in df[:50].iterrows():
 		a = get_url_embed_text(row['user_screen_name'], row['id'])
@@ -40,14 +39,15 @@ def get_tweets_for_embedding():
 
 def constructHtml():
 
-	embeds = get_tweets_for_embedding()
 	template_filepath = os.path.join(os.path.dirname(__file__), "index_template.html")
+	template = open(template_filepath).read()
 
-	newfile = open(template_filepath).read().replace("[EMBEDS]", "".join(embeds))
+	embeds = get_tweets_for_embedding()
+	output = template.replace("[EMBEDS]", "".join(embeds))
 
 	output_filepath = os.path.join(os.path.dirname(__file__), "../index.html")
 	with open(output_filepath, 'w') as f:
-		f.write(newfile)
+		f.write(output)
 
 	return 
 
