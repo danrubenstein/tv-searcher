@@ -8,3 +8,4 @@ pip-selfcheck.json
 *.txt
 *.csv
 /share
+*.json

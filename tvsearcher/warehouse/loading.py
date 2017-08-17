@@ -6,6 +6,7 @@ import uuid
 
 import pandas as pd
 from sqlalchemy import create_engine
+import boto3
 
 from .. import PG_ENGINE, PG_CONNECTION
 from ..modeling.model_labeling import score_unlabeled_tweets
@@ -16,15 +17,17 @@ execute = True
 
 def load_resources_from_server():
 	
+	result = PG_CONNECTION.execute("select filename from tweet_data.loaded_files;")
+	loaded_files = [x['filename'] for x in result]
+	bucket = boto3.resource('s3').Bucket(os.environ['S3_BUCKET_NAME'])
 	raw_directory = "tmp-resource-"+str(uuid.uuid4())
 	[shutil.rmtree(x) for x in os.listdir() if "tmp-resource" in x and os.path.isdir(x)]
 	os.mkdir(raw_directory)
-	aws_cmd = "aws s3 cp --recursive s3://{}/{}/downloads ./{}".format(os.environ['S3_BUCKET_NAME'], 
-														os.environ['PROJECT_NAME'], 
-														raw_directory).split()
-	subprocess.call(aws_cmd)
+	for i in bucket.objects.filter(Prefix='{}/downloads'.format(os.environ['PROJECT_NAME'])):
+		if i.key.split("/")[-1] not in loaded_files and i.key[-3:] == 'csv':
+			bucket.download_file(i.key, "{}/{}".format(raw_directory, i.key.split("/")[-1]))
 
-	return raw_directory
+	return None
 
 
 def get_available_tweet_csvs():
@@ -54,11 +57,16 @@ def process_tweet_csv(tweet_csv_filename, tweet_csv_file_directory):
 	tweetcsv_filepath = os.path.join(tweet_csv_file_directory, tweet_csv_filename)
 	tweetcsv_file = open(tweetcsv_filepath)
 	tweet_frame = pd.DataFrame.from_csv(tweetcsv_file, index_col=None)
-	print(len(tweet_frame))
+	
+	
+
 	# raw records input
 	if execute:
-		tweet_frame.to_sql("scraping_raw_records", PG_ENGINE, 
-								schema="tweet_data", if_exists="append", index=False)
+		tweet_csv_filepath2 = os.path.join(os.path.dirname(__file__)+"/../../", tweetcsv_filepath)
+		PG_CONNECTION.execute("""
+			COPY tweet_data.scraping_raw_records 
+			FROM '{}' 
+			WITH (FORMAT CSV, HEADER TRUE);""".format(tweet_csv_filepath2))
 
 	# add to list of files
 	
@@ -103,7 +111,7 @@ def process_for_label_pipeline(tweets_df):
 
 def run_loading_process():
 
-	# load_resources_from_server()
+	load_resources_from_server()
 
 	available_files, resource_directory = get_available_tweet_csvs()
 	print(available_files)

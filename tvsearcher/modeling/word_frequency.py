@@ -18,7 +18,7 @@ def find_ngrams(input_string, n):
 	return [" ".join(x) for x in list(zip(*[input_list[i:] for i in range(n)]))]
 
 
-def get_ngram_frequency_tf_idf(df, n, tags_max=4, tags_start_max=1):
+def get_ngram_frequency_tf_idf(df, n):
 	
 	relevant_counts = df[df['label'] == 1]['tweet_status_cleaned'].apply(lambda x: pd.value_counts(find_ngrams(x, n))).sum(axis = 0)
 	unrelevant_counts =  df[df['label'] == 0]['tweet_status_cleaned'].apply(lambda x: pd.value_counts(find_ngrams(x, n))).sum(axis = 0)
@@ -27,6 +27,8 @@ def get_ngram_frequency_tf_idf(df, n, tags_max=4, tags_start_max=1):
 	all_words = sorted(list(set([y for (a,x) in relevance_frequencies for y in list(x.index)])))
 	stat_dicts = []
 	n_docs = len(relevance_frequencies)
+
+	print(n, len(all_words))
 
 	for word in all_words:
 		
@@ -62,9 +64,8 @@ def generate_word_frequency_tf_idf():
 		n_gram_stats[i] = biggest_word_tf_idf
 	
 	resource_filepath = os.path.join(os.path.dirname(__file__), "resources/ngram_tf_idf.json")	
-	f = open(resource_filepath, 'w') 
-	json.dump(n_gram_stats, f)
-	f.close()
+	with open(resource_filepath, 'w') as f:
+		json.dump(n_gram_stats, f)
 
 
 def get_word_tf_idf_from_status(status, tf_idf, for_relevant, cumulative=False):
@@ -108,6 +109,7 @@ def get_word_tf_idf(tweets_df):
 
 	return tweets_df
 
+
 def set_first_word_frequency(status, frequencies):
 
 	first_word = status.split()[0]
@@ -127,13 +129,11 @@ def get_corpus_first_word_frequencies():
 	relative_result = (pos_first_words / (pos_first_words + neg_first_words)).fillna(0)
 	total_result = ((pos_first_words + neg_first_words) / ((pos_first_words + neg_first_words).sum())).fillna(0)
 
-	
-	
 	resource_filepath = os.path.join(os.path.dirname(__file__), "resources/leading_word_freqs.json")	
-	f = open(resource_filepath, 'wb') 
-	pickle.dump([relative_result, pos_first_words, total_result], f)
-	f.close()
+	with open(resource_filepath, 'wb') as f:
+		pickle.dump([relative_result, pos_first_words, total_result], f)
 
+	return 
 
 def apply_first_word_frequencies(tweets_df):
 	
@@ -147,6 +147,7 @@ def apply_first_word_frequencies(tweets_df):
 
 	return tweets_df
 
+
 def get_token_finding(tweets_df):
 	'''
 	Apply all account pre-processing
@@ -154,13 +155,10 @@ def get_token_finding(tweets_df):
 	a = tweets_df
 
 	functions = [apply_first_word_frequencies]
-	# functions = [get_word_tf_idf, apply_first_word_frequencies]
 	for f in functions:
 		a = f(a)
 
 	return a
-
-
 
 
 def get_collocations(tweets_df):
